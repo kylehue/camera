@@ -1,8 +1,9 @@
-class Camera {
+class Camera2D {
     constructor(context, settings) {
         settings = settings || {};
-        this.distance = 1000.0;
-        this.lookAt = [0, 0];
+        this.movement = Camera2D.vector(0, 0);
+        this.velocity = Camera2D.vector(0, 0);
+        this.distance = 200;
         this.context = context;
         this.fieldOfView = settings.fieldOfView || Math.PI / 4.0;
         this.viewport = {
@@ -14,9 +15,22 @@ class Camera {
             height: 0,
             scale: [1.0, 1.0]
         };
-
-        this.addListeners();
+        this.moveTransitionSpeed = settings.moveTransitionSpeed || 1;
+        this.zoomTransitionSpeed = settings.zoomTransitionSpeed || 1;
+        this.sizeTransitionSpeed = settings.sizeTransitionSpeed || 1;
         this.updateViewport();
+    }
+
+    setMoveTransitionSpeed(speed) {
+        this.moveTransitionSpeed = speed;
+    }
+
+    setZoomTransitionSpeed(speed) {
+        this.zoomTransitionSpeed = speed;
+    }
+
+    setSizeTransitionSpeed(speed) {
+        this.sizeTransitionSpeed = speed;
     }
 
     begin() {
@@ -39,10 +53,10 @@ class Camera {
 
     updateViewport() {
         this.aspectRatio = this.context.canvas.width / this.context.canvas.height;
-        this.viewport.width = this.distance * Math.tan(this.fieldOfView);
-        this.viewport.height = this.viewport.width / this.aspectRatio;
-        this.viewport.left = this.lookAt[0] - (this.viewport.width / 2.0);
-        this.viewport.top = this.lookAt[1] - (this.viewport.height / 2.0);
+        this.viewport.width = Camera2D.lerp(this.viewport.width, this.distance * Math.tan(this.fieldOfView), this.sizeTransitionSpeed);
+        this.viewport.height = Camera2D.lerp(this.viewport.height, this.viewport.width / this.aspectRatio, this.sizeTransitionSpeed);
+        this.viewport.left = this.movement.x - (this.viewport.width / 2);
+        this.viewport.top = this.movement.y - (this.viewport.height / 2);
         this.viewport.right = this.viewport.left + this.viewport.width;
         this.viewport.bottom = this.viewport.top + this.viewport.height;
         this.viewport.scale[0] = this.context.canvas.width / this.viewport.width;
@@ -50,58 +64,41 @@ class Camera {
     }
 
     zoomTo(z) {
-        this.distance = z;
+        this.distance = Camera2D.lerp(this.distance, z, this.zoomTransitionSpeed);
         this.updateViewport();
     }
 
     moveTo(x, y) {
-        this.lookAt[0] = x;
-        this.lookAt[1] = y;
+        this.velocity = Camera2D.vector((x - this.movement.x) * this.moveTransitionSpeed, (y - this.movement.y) * this.moveTransitionSpeed);
+        this.movement.x = Camera2D.lerp(this.movement.x, x, this.moveTransitionSpeed);
+        this.movement.y = Camera2D.lerp(this.movement.y, y, this.moveTransitionSpeed);
         this.updateViewport();
     }
 
     screenToWorld(x, y, obj) {
-        obj = obj || {};
-        obj.x = (x / this.viewport.scale[0]) + this.viewport.left;
-        obj.y = (y / this.viewport.scale[1]) + this.viewport.top;
+        obj = obj || {
+            x: (x / this.viewport.scale[0]) + this.viewport.left,
+            y: (y / this.viewport.scale[1]) + this.viewport.top
+        };
         return obj;
     }
 
     worldToScreen(x, y, obj) {
-        obj = obj || {};
-        obj.x = (x - this.viewport.left) * (this.viewport.scale[0]);
-        obj.y = (y - this.viewport.top) * (this.viewport.scale[1]);
+        obj = obj || {
+            x: (x - this.viewport.left) * (this.viewport.scale[0]),
+            y: (y - this.viewport.top) * (this.viewport.scale[1])
+        };
         return obj;
     }
 
-    addListeners() {
-        // Zoom and scroll around world
-        window.onwheel = e => {
-            if (e.ctrlKey) {
-                // Your zoom/scale factor
-                let zoomLevel = this.distance - (e.deltaY * 20);
-                if (zoomLevel <= 1) {
-                    zoomLevel = 1;
-                }
-
-                this.zoomTo(zoomLevel);
-            } else {
-                // Your track-pad X and Y positions
-                const x = this.lookAt[0] + (e.deltaX * 2);
-                const y = this.lookAt[1] + (e.deltaY * 2);
-
-                this.moveTo(x, y);
-            }
+    static vector(x, y) {
+        return {
+            x: x,
+            y: y
         };
-
-        // Center camera on "R"
-        window.addEventListener('keydown', e => {
-            if (e.key === 'r') {
-                this.zoomTo(1000);
-                this.moveTo(0, 0);
-            }
-        });
     }
-};
 
-export default Camera;
+    static lerp(start, stop, per) {
+        return per * (stop - start) + start;
+    }
+}
